@@ -74,8 +74,8 @@ __device__ int getEyesFromChunkseed(ull chunkseed) {
 		{
 		next(chunkseed);
 		if (chunkseed <= 253327479039590) {
-			nbEyes++;
-			if(nbEyes++>12-eye_count){
+
+			if(+nbEyes>12-eye_count){
 				return 0;
 			}
 		}
