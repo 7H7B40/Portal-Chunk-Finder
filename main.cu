@@ -1,5 +1,4 @@
 #include <cmath>
-#include <ctime>
 #include <string>
 #include <stdio.h>
 #define M_PI 3.14159265358978 //Hello !
@@ -7,27 +6,35 @@
 #define ull unsigned long long
 #define next(N) N*=25214903917;N+=11;N%=281474976710656
 #define numBlocks 1024
-#define numThreadsInBlock 1024
-#define search_from 0
-#define search_to 50000000000
+#define numThreadsPerBlock 256
+#define numSeedsPerThread 1
+#define search_from 300000000000
+#define search_to   400000000000
+#define eye_count 11
 using namespace std;
 
 __device__ int getEyesFromChunkseed(ull chunkseed);
-__global__ void checkSeeds();
+__global__ void checkSeeds(ull* start);
 
 int main() {
-	checkSeeds<<<numBlocks,numThreadsInBlock>>>();
+for(ull i = search_from; i<search_to+numBlocks*numThreadsPerBlock*numSeedsPerThread;i+=numBlocks*numThreadsPerBlock*numSeedsPerThread){
+	ull* d_seed;
+	cudaMalloc((void**)&d_seed,sizeof(ull));
+	cudaMemcpy(d_seed,&i,sizeof(ull),cudaMemcpyHostToDevice);
+	checkSeeds<<<numBlocks,numThreadsPerBlock>>>(d_seed);
 	cudaDeviceSynchronize();
+	cudaFree(d_seed);
+}
 	return 0;
 }
-__global__ void checkSeeds() {
-
-	ull stepSize = ((ull)numBlocks)*numThreadsInBlock;
+__global__ void checkSeeds(ull* start) {
 	ull seed, RNGseed, chunkseed;
 	ll var8, var10;
 	int baseX, baseZ, chunkX, chunkZ, nbEyes;
 	double angle, dist;
-	for (seed = search_from+blockIdx.x+threadIdx.x*numBlocks; seed <search_to; seed += stepSize) {
+	seed=*start+threadIdx.x+blockIdx.x*numThreadsPerBlock;
+	for(int i = 0; i<numSeedsPerThread;i++){
+	if(seed<search_to){
 		RNGseed = seed ^ 25214903917;
 		next(RNGseed);
 		var8 = (RNGseed >> 16) << 32;
@@ -49,11 +56,12 @@ __global__ void checkSeeds() {
 					chunkZ <= max(baseZ - 6, baseZ + 6); chunkZ++) {
 				chunkseed = (var8 * chunkX + var10 * chunkZ) ^ seed;
 				nbEyes = getEyesFromChunkseed(chunkseed);
-				if (nbEyes >= 11) {
-					printf("%d %d %d %d\n",seed,nbEyes,chunkX,chunkZ);
+				if (nbEyes >= eye_count) {
+					printf("%llu %d %d %d\n",seed,nbEyes,chunkX,chunkZ);
 				}
 			}
 		}
+	}seed+=numThreadsPerBlock*numBlocks;
 	}
 }
 
