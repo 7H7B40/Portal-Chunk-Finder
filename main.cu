@@ -8,12 +8,12 @@
 #define numBlocks 1024
 #define numThreadsPerBlock 256
 #define numSeedsPerThread 1
-#define search_from 400000000000
+#define search_from 0
 #define search_to   1000000000000
 #define eye_count 11
 using namespace std;
 
-__device__ int getEyesFromChunkseed(ull chunkseed);
+__device__ bool getEyesFromChunkseed(ull chunkseed);
 __global__ void checkSeeds(ull* start);
 
 int main() {
@@ -30,7 +30,7 @@ for(ull i = search_from; i<search_to+numBlocks*numThreadsPerBlock*numSeedsPerThr
 __global__ void checkSeeds(ull* start) {
 	ull seed, RNGseed, chunkseed;
 	ll var8, var10;
-	int baseX, baseZ, chunkX, chunkZ, nbEyes;
+	int baseX, baseZ, chunkX, chunkZ;
 	double angle, dist;
 	seed=*start+threadIdx.x+blockIdx.x*numThreadsPerBlock;
 	for(int i = 0; i<numSeedsPerThread;i++){
@@ -53,9 +53,8 @@ __global__ void checkSeeds(ull* start) {
 			for (chunkX = min(baseX - 6, baseX + 6); chunkX <= max(baseX - 6, baseX + 6); chunkX++) {
 				for (chunkZ = min(baseZ - 6, baseZ + 6); chunkZ <= max(baseZ - 6, baseZ + 6); chunkZ++) {
 					chunkseed = (var8 * chunkX + var10 * chunkZ) ^ seed;
-					nbEyes = getEyesFromChunkseed(chunkseed);
-					if (nbEyes >= eye_count) {
-						printf("%llu %d %d %d\n",seed,nbEyes,chunkX,chunkZ);
+					if (getEyesFromChunkseed(chunkseed)) {
+						printf("%llu %d %d %d\n",seed,eye_count,chunkX,chunkZ);
 					}
 				}
 			}
@@ -64,21 +63,20 @@ __global__ void checkSeeds(ull* start) {
 	}
 }
 
-__device__ int getEyesFromChunkseed(ull chunkseed) {
+__device__ bool getEyesFromChunkseed(ull chunkseed) {
 	int iEye, nbEyes(0);
 	chunkseed = chunkseed ^ 25214903917; //This is the equivalent of starting a new Java RNG
 	chunkseed *= 124279299069389; //This line and the one after it simulate 761 calls to next() (761 was determined by CrafterDark)
 	chunkseed += 17284510777187;
 	chunkseed %= 281474976710656;
-	for (iEye = 0; iEye < 12; iEye++) //This is the same as calling nextFloat() 10 times and comparing it to 0.9
+	for (iEye = 0; iEye < 12; iEye++) //This is the same as calling nextFloat() 12 times and comparing it to 0.9
 		{
 		next(chunkseed);
 		if (chunkseed <= 253327479039590) {
-
-			if(++nbEyes>12-eye_count){
-				return 0;
+			if(nbEyes++>12-eye_count){
+				return false;
 			}
 		}
 	}
-	return 12-nbEyes;
+	return nbEyes==12-eye_count;
 }
