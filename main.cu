@@ -61,7 +61,7 @@ int main() {
 	return 0;
 }
 __global__ void checkSeeds(ull* start, int* d_sinLUT, int* d_cosLUT) { // This function is full of Azelef math magic
-	ull seed, RNGseed, chunkseed;
+	ull seed, RNGseed, chunkseed,initialxor;
 	ll var8, var10;
 	int baseX, baseZ, chunkX, chunkZ, angle;
 	double dist;
@@ -83,9 +83,10 @@ __global__ void checkSeeds(ull* start, int* d_sinLUT, int* d_cosLUT) { // This f
 			var10 = var10 / 2 * 2 + 1;
 			baseX = (*(d_cosLUT+angle) * dist) / 8192;
 			baseZ = (*(d_sinLUT+angle) * dist) / 8192;
-			for (chunkX = min(baseX - 6, baseX + 6); chunkX <= max(baseX - 6, baseX + 6); chunkX++) {
-				for (chunkZ = min(baseZ - 6, baseZ + 6); chunkZ <= max(baseZ - 6, baseZ + 6); chunkZ++) {
-					chunkseed = (var8 * chunkX + var10 * chunkZ) ^ seed;
+			initialxor = seed ^ 25214903917;
+			for (chunkX = baseX - 6; chunkX <= baseX + 6; chunkX++) {
+				for (chunkZ =baseZ - 6; chunkZ <= baseZ + 6; chunkZ++) {
+					chunkseed = (var8 * chunkX + var10 * chunkZ) ^ initialxor;
 					if (getEyesFromChunkseed(chunkseed)) {
 						printf("%llu %d %d %d\n",seed,eye_count,chunkX,chunkZ);
 					}
@@ -97,7 +98,7 @@ __global__ void checkSeeds(ull* start, int* d_sinLUT, int* d_cosLUT) { // This f
 }
  
 __device__ bool getEyesFromChunkseed(ull chunkseed) {
-	chunkseed = chunkseed ^ 25214903917; //This is the equivalent of starting a new Java RNG
+	//chunkseed = chunkseed ^ 25214903917; //This is the equivalent of starting a new Java RNG // this was moved to the checkSeeds method so it's only computed once
 	chunkseed *= 124279299069389; //This line and the one after it simulate 761 calls to next() (761 was determined by CrafterDark)
 	chunkseed += 17284510777187;
 	chunkseed %= 281474976710656;
