@@ -28,8 +28,11 @@ void calculateLUTs(){ //Thanks to jacobsjo for adding a Look-Up Table
 int main(int argc, char* argv[]) {
 	using namespace std::chrono;
 
+  cudaSetDevice(0);
+  cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync);
+
 	bool printTime = true;
-	ull searchTo = 	100000000000;
+	ull searchTo = 100000000000;
 	ull searchFrom = 0;
 
 	int rad = 64;
@@ -39,7 +42,7 @@ int main(int argc, char* argv[]) {
 		std::string arg = std::string(argv[i]);
 		if (std::string(argv[i]) == "-t") {
 			std::string nextArg = std::string(argv[++i]);
-			printTime = !(nextArg == "false" || nextArg == "0");
+			printTime = (nextArg != "false" && nextArg != "0");
 		}
 		else if (arg == "-s"){
 			searchFrom = (ull)std::stoll (std::string(argv[++i]),NULL,0);
@@ -80,7 +83,7 @@ int main(int argc, char* argv[]) {
 	cudaFree(d_seed);
 	cudaFree(d_sinLUT);
 	cudaFree(d_cosLUT);
-	if (!printTime) {
+	if (printTime) {
 		high_resolution_clock::time_point t2 = high_resolution_clock::now();
 		duration<double> time_span = duration_cast<duration<double>>(t2 - t1);
 		double seconds = time_span.count();
@@ -119,7 +122,7 @@ __global__ void checkSeeds(ull* start, int* d_sinLUT, int* d_cosLUT, int r, int 
 
 	for (chunkX = baseX - sr; chunkX <= baseX + sr; chunkX++) {
 		for (chunkZ = baseZ - sr; chunkZ <= baseZ + sr; chunkZ++) {
-			chunkseed = (var8 * chunkX + var10 * chunkZ);
+			chunkseed = (var8 * chunkX + var10 * chunkZ) ^ (seed ^ 25214903917);
 			if (getEyesFromChunkseed(chunkseed)) {
 				printf("%llu %d %d\n",seed,chunkX,chunkZ);
 				goto end;
@@ -127,11 +130,11 @@ __global__ void checkSeeds(ull* start, int* d_sinLUT, int* d_cosLUT, int r, int 
 		}
 	}
 	end:
-		seed = 0;
+		angle = 0;
 }
 
 __device__ bool getEyesFromChunkseed(ull chunkseed) {
-	chunkseed = chunkseed ^ 25214903917; //This is the equivalent of starting a new Java RNG
+	// chunkseed = chunkseed ^ 25214903917; //This is the equivalent of starting a new Java RNG //WTF WAS JENDRIK THINKING
 	chunkseed *= 124279299069389; //This line and the one after it simulate 761 calls to next() (761 was determined by CrafterDark)
 	chunkseed += 17284510777187;
 	chunkseed %= 281474976710656;
