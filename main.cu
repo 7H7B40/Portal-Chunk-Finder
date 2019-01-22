@@ -13,7 +13,7 @@
 #define M_PI 3.1415926535897932
 
 __device__ bool getEyesFromChunkseed(ull chunkseed);
-__global__ void checkSeeds(ull* start, int* d_sinLUT, int* d_cosLUT, int r, int sr);
+__global__ void checkSeeds(ull* start, int* d_sinLUT, int* d_cosLUT, int* d_rad, int* d_srad);
 
 int sinLUT[1024];
 int cosLUT[1024];
@@ -59,6 +59,7 @@ int main(int argc, char* argv[]) {
 	high_resolution_clock::time_point t1 = high_resolution_clock::now();
 
 	int *d_sinLUT, *d_cosLUT;
+	int *d_rad, *d_srad;
 	ull *d_seed;
 	int refresh = 0;
 
@@ -67,14 +68,18 @@ int main(int argc, char* argv[]) {
 	cudaMalloc((void**)&d_sinLUT,sizeof(int)*1024);
 	cudaMalloc((void**)&d_cosLUT,sizeof(int)*1024);
 	cudaMalloc((void**)&d_seed,sizeof(ull));
+	cudaMalloc((void**)&d_rad,sizeof(int));
+	cudaMalloc((void**)&d_srad,sizeof(int));
 
 	cudaMemcpy(d_sinLUT,&sinLUT,sizeof(int)*1024,cudaMemcpyHostToDevice);
 	cudaMemcpy(d_cosLUT,&cosLUT,sizeof(int)*1024,cudaMemcpyHostToDevice);
+	cudaMemcpy(d_rad,&rad,sizeof(int),cudaMemcpyHostToDevice);
+	cudaMemcpy(d_srad,&srad,sizeof(int),cudaMemcpyHostToDevice);
 	//3.5ms; 12us; 3us
 	for(ull i = searchFrom; i<searchTo+numBlocks*numThreadsPerBlock;i+=numBlocks*numThreadsPerBlock){
 		cudaMemcpy(d_seed,&i,sizeof(ull),cudaMemcpyHostToDevice);
 		if(refresh++ % 100000 == 0) cudaDeviceSynchronize();
-		checkSeeds<<<numBlocks,numThreadsPerBlock>>>(d_seed, d_sinLUT, d_cosLUT, rad, srad);
+		checkSeeds<<<numBlocks,numThreadsPerBlock>>>(d_seed, d_sinLUT, d_cosLUT, d_rad, d_srad);
 		cudaError_t err = cudaGetLastError();
 		if (err != cudaSuccess)
     	printf("Error: %s\n", cudaGetErrorString(err));
@@ -83,6 +88,8 @@ int main(int argc, char* argv[]) {
 	cudaFree(d_seed);
 	cudaFree(d_sinLUT);
 	cudaFree(d_cosLUT);
+	cudaFree(d_rad);
+	cudaFree(d_srad);
 	if (printTime) {
 		high_resolution_clock::time_point t2 = high_resolution_clock::now();
 		duration<double> time_span = duration_cast<duration<double>>(t2 - t1);
@@ -92,7 +99,7 @@ int main(int argc, char* argv[]) {
 
 	return 0;
 }
-__global__ void checkSeeds(ull* start, int* d_sinLUT, int* d_cosLUT, int r, int sr) { // This function is full of Azelef math magic
+__global__ void checkSeeds(ull* start, int* d_sinLUT, int* d_cosLUT, int* d_rad, int* d_srad) { // This function is full of Azelef math magic
 	ull seed, RNGseed1, RNGseed2, chunkseed;
 	ll var8, var10;
 	int baseX, baseZ, chunkX, chunkZ, angle;
@@ -102,14 +109,14 @@ __global__ void checkSeeds(ull* start, int* d_sinLUT, int* d_cosLUT, int r, int 
 	RNGseed2 = seed ^ 25214903917;
 	next3(RNGseed2);
 	dist = 160+(RNGseed2/2199023255552);
-	if(dist > r*4) return;
+	if(dist > *d_rad*4) return;
 
 	RNGseed1 = seed ^ 25214903917;
 	next(RNGseed1);
 	var8 = (RNGseed1 >> 16) << 32;
 	angle = RNGseed1/274877906944;
 	next(RNGseed1);
-	var8 += (int) (RNGseed1 >> 16); //Don't ask me why there is a conversion to int here, I don't know either.
+	var8 += (int) (RNGseed1 >> 16); //Don't ask me why there is a conversion to int here, I don't know either. //because its mojang's bad code -geo
 	var8 = var8 / 2 * 2 + 1;
 	var10 = (RNGseed2 >> 16) << 32;
 	next(RNGseed2);
@@ -120,8 +127,8 @@ __global__ void checkSeeds(ull* start, int* d_sinLUT, int* d_cosLUT, int r, int 
 	baseZ = (*(d_sinLUT+angle) * dist) / 8192;
 
 
-	for (chunkX = baseX - sr; chunkX <= baseX + sr; chunkX++) {
-		for (chunkZ = baseZ - sr; chunkZ <= baseZ + sr; chunkZ++) {
+	for (chunkX = baseX - *d_srad; chunkX <= baseX + *d_srad; chunkX++) {
+		for (chunkZ = baseZ - *d_srad; chunkZ <= baseZ + *d_srad; chunkZ++) {
 			chunkseed = (var8 * chunkX + var10 * chunkZ) ^ (seed ^ 25214903917);
 			if (getEyesFromChunkseed(chunkseed)) {
 				printf("%llu %d %d\n",seed,chunkX,chunkZ);
